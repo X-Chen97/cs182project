@@ -2,6 +2,8 @@ from __future__ import print_function, division
 
 import torch
 import torch.nn as nn
+import warnings
+warnings.filterwarnings('ignore')
 
 
 class ConvLayer(nn.Module):
@@ -55,7 +57,7 @@ class ConvLayer(nn.Module):
           Atom hidden features after convolution
 
         """
-        # TODO will there be problems with the index zero padding?
+
         N, M = nbr_fea_idx.shape
         # convolution
         atom_nbr_fea = atom_in_fea[nbr_fea_idx, :]

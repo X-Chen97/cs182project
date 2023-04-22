@@ -6,6 +6,7 @@ import json
 import os
 import random
 import warnings
+warnings.filterwarnings('ignore')
 
 import numpy as np
 import torch
@@ -52,26 +53,10 @@ def get_train_val_test_loader(dataset, collate_fn=default_collate,
     if train_ratio + val_ratio + test_ratio != 1:
         raise ValueError('The sum of train_ratio, val_ratio and test_ratio should be 1')
     total_size = len(dataset)
-    # if kwargs['train_size'] is None:
-    #     if train_ratio is None:
-    #         assert val_ratio + test_ratio < 1
-    #         train_ratio = 1 - val_ratio - test_ratio
-    #         print(f'[Warning] train_ratio is None, using 1 - val_ratio - '
-    #               f'test_ratio = {train_ratio} as training data.')
-    #     else:
-    #         assert train_ratio + val_ratio + test_ratio <= 1
     indices = list(range(total_size))
-    # if kwargs['train_size']:
-    #     train_size = kwargs['train_size']
-    # else:
     train_size = int(train_ratio * total_size)
-    # if kwargs['test_size']:
-    #     test_size = kwargs['test_size']
-    # else:
     test_size = int(test_ratio * total_size)
-    # if kwargs['val_size']:
-    #     valid_size = kwargs['val_size']
-    # else:
+
     valid_size = int(val_ratio * total_size)
     train_sampler = SubsetRandomSampler(indices[:train_size])
     val_sampler = SubsetRandomSampler(
