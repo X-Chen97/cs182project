@@ -3,8 +3,94 @@ from __future__ import print_function, division
 import torch
 import torch.nn as nn
 import warnings
-
 warnings.filterwarnings("ignore")
+
+
+class WeightShareConvLayer(nn.Module):
+    """
+    Convolutional operation on graphs
+    """
+
+    def __init__(self, atom_fea_len, nbr_fea_len):
+        """
+        Initialize ConvLayer.
+
+        Parameters
+        ----------
+
+        atom_fea_len: int
+          Number of atom hidden features.
+        nbr_fea_len: int
+          Number of bond features.
+        """
+        super(WeightShareConvLayer, self).__init__()
+        ############################################################################
+        # TODO: Build a WeightShareConvLayer according to equation explained in 
+        # Notebook. Note that as a gate function we will use batchnormalization first
+        # and then apply softplus. 
+        # Hint: Try to undersatnd ConvLayer first
+        
+        # Solution
+        self.atom_fea_len = atom_fea_len
+        self.nbr_fea_len = nbr_fea_len
+        self.fc_nbr = nn.Linear(
+            self.atom_fea_len + self.nbr_fea_len, self.atom_fea_len
+        )
+        self.fc_in = nn.Linear(self.atom_fea_len, self.atom_fea_len)
+        self.softplus = nn.Softplus()
+        self.bn = nn.BatchNorm1d(self.atom_fea_len)
+        ############################################################################
+
+    def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
+        """
+        Forward pass
+
+        N: Total number of atoms in the batch
+        M: Max number of neighbors
+
+        Parameters
+        ----------
+
+        atom_in_fea: Variable(torch.Tensor) shape (N, atom_fea_len)
+          Atom hidden features before convolution
+        nbr_fea: Variable(torch.Tensor) shape (N, M, nbr_fea_len)
+          Bond features of each atom's M neighbors
+        nbr_fea_idx: torch.LongTensor shape (N, M)
+          Indices of M neighbors of each atom
+
+        Returns
+        -------
+
+        atom_out_fea: nn.Variable shape (N, atom_fea_len)
+          Atom hidden features after convolution
+
+        """
+
+        N, M = nbr_fea_idx.shape
+        # convolution
+        ############################################################################
+        # TODO: Build a WeightShareConvLayer according to equation explained in 
+        # Notebook. Note that as a gate function we will use batchnormalization first
+        # and then apply softplus. 
+        # Hint: Try to undersatnd ConvLayer first
+        
+        # Solution
+        atom_nbr_fea = atom_in_fea[nbr_fea_idx, :]
+        total_nbr_fea = torch.cat(
+            [
+                atom_nbr_fea,
+                nbr_fea,
+            ],
+            dim=2,
+        )
+        nbr_fc_fea = self.fc_nbr(total_nbr_fea)
+        atom_in_fea = self.fc_in(atom_in_fea)
+        total_fea = torch.sum(nbr_fc_fea, dim=1) + atom_in_fea
+        total_gated_fea = self.bn(total_fea)
+        out = self.softplus(total_gated_fea)
+        ############################################################################
+
+        return out
 
 
 class ConvLayer(nn.Module):
@@ -99,6 +185,7 @@ class CrystalGraphConvNet(nn.Module):
         n_conv=3,
         h_fea_len=128,
         n_h=1,
+        option='C'
     ):
         """
         Initialize CrystalGraphConvNet.
@@ -132,13 +219,29 @@ class CrystalGraphConvNet(nn.Module):
         ############################################################################
         # TODO: Initialize the parameters.
         # 1. self.embedding: the embedding layer (orig_atom_fea_len x atom_fea_len)
-        # 2. self.convs: list of convolutioal layers. Hint: try using nn.ModuleList
+        # 2. self.convs: list of convolutioal layers we built above. 
+        #    Try to use ConvLayer with option "C" and use WeightShareConvLayer with
+        #    option "WC". Hint: try using nn.ModuleList
         # 3. self.conv_to_fc: the last layer (atom_fea_len x h_fea_len)
         # 4. self.conv_to_fc_softplus: the softplus layer.
+        
+        # raise NotImplementedError()
+        
+        # Solution
+        self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len)
+        if option == 'C':
+            self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
+                                        nbr_fea_len=nbr_fea_len)
+                                        for _ in range(n_conv)])
+        elif option == 'WC':
+            self.convs = nn.ModuleList([WeightShareConvLayer(atom_fea_len=atom_fea_len,
+                            nbr_fea_len=nbr_fea_len)
+                            for _ in range(n_conv)])
+        self.conv_to_fc = nn.Linear(atom_fea_len, h_fea_len)
+        self.conv_to_fc_softplus = nn.Softplus()
         ############################################################################
-        # """
-        raise NotImplementedError()
-        # """
+        
+        # Hidden layers.
         if n_h > 1:
             self.fcs = nn.ModuleList(
                 [nn.Linear(h_fea_len, h_fea_len) for _ in range(n_h - 1)]
@@ -181,10 +284,18 @@ class CrystalGraphConvNet(nn.Module):
         # 3. Applying pooling.
         # 4. Apply conv_to_fc
         # 5. Apply softplus
+        
+        # raise NotImplementedError()
+        
+        # Solution.
+        atom_fea = self.embedding(atom_fea)
+        for conv_func in self.convs:
+            atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
+        crys_fea = self.pooling(atom_fea, crystal_atom_idx)
+        crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
+        crys_fea = self.conv_to_fc_softplus(crys_fea)
         ############################################################################
-        # """
-        raise NotImplementedError()
-        # """
+
         if hasattr(self, "fcs") and hasattr(self, "softpluses"):
             for fc, softplus in zip(self.fcs, self.softpluses):
                 crys_fea = softplus(fc(crys_fea))

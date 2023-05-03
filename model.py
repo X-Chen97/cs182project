@@ -6,6 +6,77 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+class WeightShareConvLayer(nn.Module):
+    """
+    Convolutional operation on graphs
+    """
+
+    def __init__(self, atom_fea_len, nbr_fea_len):
+        """
+        Initialize ConvLayer.
+
+        Parameters
+        ----------
+
+        atom_fea_len: int
+          Number of atom hidden features.
+        nbr_fea_len: int
+          Number of bond features.
+        """
+        super(WeightShareConvLayer, self).__init__()
+        self.atom_fea_len = atom_fea_len
+        self.nbr_fea_len = nbr_fea_len
+        self.fc_nbr = nn.Linear(
+            self.atom_fea_len + self.nbr_fea_len, self.atom_fea_len
+        )
+        self.fc_in = nn.Linear(self.atom_fea_len, self.atom_fea_len)
+        self.softplus = nn.Softplus()
+        self.bn = nn.BatchNorm1d(self.atom_fea_len)
+
+    def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
+        """
+        Forward pass
+
+        N: Total number of atoms in the batch
+        M: Max number of neighbors
+
+        Parameters
+        ----------
+
+        atom_in_fea: Variable(torch.Tensor) shape (N, atom_fea_len)
+          Atom hidden features before convolution
+        nbr_fea: Variable(torch.Tensor) shape (N, M, nbr_fea_len)
+          Bond features of each atom's M neighbors
+        nbr_fea_idx: torch.LongTensor shape (N, M)
+          Indices of M neighbors of each atom
+
+        Returns
+        -------
+
+        atom_out_fea: nn.Variable shape (N, atom_fea_len)
+          Atom hidden features after convolution
+
+        """
+
+        N, M = nbr_fea_idx.shape
+        # convolution
+        atom_nbr_fea = atom_in_fea[nbr_fea_idx, :]
+        total_nbr_fea = torch.cat(
+            [
+                atom_nbr_fea,
+                nbr_fea,
+            ],
+            dim=2,
+        )
+        nbr_fc_fea = self.fc_nbr(total_nbr_fea)
+        atom_in_fea = self.fc_in(atom_in_fea)
+        total_fea = torch.sum(nbr_fc_fea, dim=1) + atom_in_fea
+        total_gated_fea = self.bn(total_fea)
+        out = self.softplus(total_gated_fea)
+
+        return out
+
+
 class ConvLayer(nn.Module):
     """
     Convolutional operation on graphs
@@ -82,7 +153,7 @@ class CrystalGraphConvNet(nn.Module):
     material properties.
     """
     def __init__(self, orig_atom_fea_len, nbr_fea_len,
-                 atom_fea_len=64, n_conv=3, h_fea_len=128, n_h=1):
+                 atom_fea_len=64, n_conv=3, h_fea_len=128, n_h=1, option='C'):
         """
         Initialize CrystalGraphConvNet.
 
@@ -104,9 +175,14 @@ class CrystalGraphConvNet(nn.Module):
         """
         super(CrystalGraphConvNet, self).__init__()
         self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len)
-        self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
-                                    nbr_fea_len=nbr_fea_len)
-                                    for _ in range(n_conv)])
+        if option == 'C':
+            self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
+                                        nbr_fea_len=nbr_fea_len)
+                                        for _ in range(n_conv)])
+        elif option == 'WC':
+            self.convs = nn.ModuleList([WeightShareConvLayer(atom_fea_len=atom_fea_len,
+                            nbr_fea_len=nbr_fea_len)
+                            for _ in range(n_conv)])
         self.conv_to_fc = nn.Linear(atom_fea_len, h_fea_len)
         self.conv_to_fc_softplus = nn.Softplus()
         if n_h > 1:
