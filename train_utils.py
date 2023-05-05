@@ -18,7 +18,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 
 from data_utils import CIFData
 from data_utils import collate_pool, get_train_val_test_loader
-from model import CrystalGraphConvNet
+# from model_hw import CrystalGraphConvNet
 
 
 def train(train_loader, model, criterion, optimizer, epoch, normalizer, print_freq=10):
